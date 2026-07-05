@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulator CPM — SUTT 150 kV</title>
+<style>
+  :root{
+    --ink:#0f1a2b; --ink-soft:#41506a; --line:#c9d2e0; --paper:#f3f0e9;
+    --panel:#fbfaf6; --amber:#c56a1a; --amber-soft:#f0e2cf;
+    --steel:#2f6f8f; --steel-soft:#dfeaf0;
+    --ok:#2e7d4f; --ok-soft:#dcefe2; --err:#b23a3a; --err-soft:#f6e0dd;
+    --crit:#b23a3a; --crit-glow:#f4cfcb;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'DejaVu Sans','Segoe UI',system-ui,sans-serif;
+    background:var(--paper); color:var(--ink);
+    line-height:1.5; padding:24px 16px 80px;
+  }
+  .wrap{max-width:1020px;margin:0 auto}
+  header{border-bottom:2px solid var(--ink);padding-bottom:16px;margin-bottom:8px}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber);font-weight:700}
+  h1{font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:700;letter-spacing:-.01em;margin:4px 0 6px}
+  .sub{color:var(--ink-soft);font-size:15px;max-width:70ch}
+  .board{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:20px;margin-top:20px;
+  }
+  .board h2{font-family:Georgia,serif;font-size:19px;margin-bottom:4px}
+  .board .hint{color:var(--ink-soft);font-size:13.5px;margin-bottom:14px}
+  /* progress rail */
+  .rail{display:flex;gap:0;margin:18px 0 22px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .rail div{flex:1;padding:9px 6px;text-align:center;font-size:12.5px;font-weight:600;
+    color:var(--ink-soft);background:var(--panel);border-right:1px solid var(--line);position:relative}
+  .rail div:last-child{border-right:0}
+  .rail div.active{background:var(--amber);color:#fff}
+  .rail div.done{background:var(--ok-soft);color:var(--ok)}
+  .rail div.done::after{content:" ✓"}
+  /* table */
+  .scroll{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+  th,td{border:1px solid var(--line);padding:7px 8px;text-align:center}
+  thead th{background:var(--ink);color:#fff;font-weight:600;font-size:12.5px;letter-spacing:.02em}
+  tbody th{background:var(--panel);font-weight:700;text-align:left;white-space:nowrap}
+  .desc{color:var(--ink-soft);font-weight:400;font-size:12px;display:block}
+  .pred{font-family:'DejaVu Sans Mono',monospace;font-size:12.5px;color:var(--ink-soft)}
+  input{width:56px;padding:6px 4px;text-align:center;font-size:14px;font-family:'DejaVu Sans Mono',monospace;
+    border:1px solid var(--line);border-radius:5px;background:#fff;color:var(--ink)}
+  input:focus{outline:2px solid var(--steel);outline-offset:0;border-color:var(--steel)}
+  input:disabled{background:var(--paper);color:#aeb6c2;border-style:dashed}
+  input.locked{background:var(--steel-soft);border-color:var(--steel);color:var(--steel);font-weight:700}
+  input.right{background:var(--ok-soft);border-color:var(--ok);color:var(--ok);font-weight:700}
+  input.wrong{background:var(--err-soft);border-color:var(--err);color:var(--err)}
+  col.dim{background:rgba(0,0,0,.02)}
+  tr.crit th{box-shadow:inset 4px 0 0 var(--crit)}
+  tr.crit td:first-of-type{position:relative}
+  .badge-crit{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;color:#fff;background:var(--crit);
+    padding:1px 6px;border-radius:10px;letter-spacing:.04em;vertical-align:middle}
+  /* controls */
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
+  button{font-family:inherit;font-size:14px;font-weight:600;padding:10px 18px;border-radius:7px;border:1px solid var(--ink);
+    background:var(--ink);color:#fff;cursor:pointer;transition:transform .05s}
+  button:active{transform:translateY(1px)}
+  button.ghost{background:transparent;color:var(--ink)}
+  button.ghost:hover{background:var(--paper)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .score{margin-left:auto;font-family:Georgia,serif;font-size:15px}
+  .score b{font-size:20px}
+  /* feedback */
+  .feedback{margin-top:14px;padding:12px 14px;border-radius:8px;font-size:14px;display:none}
+  .feedback.show{display:block}
+  .feedback.good{background:var(--ok-soft);border:1px solid var(--ok);color:#1c5637}
+  .feedback.bad{background:var(--err-soft);border:1px solid var(--err);color:#7d2626}
+  .feedback ul{margin:6px 0 0 18px}
+  /* bonus */
+  .bonus{margin-top:22px;border-top:1px dashed var(--line);padding-top:18px;display:none}
+  .bonus.show{display:block}
+  .bonus h3{font-family:Georgia,serif;font-size:17px;margin-bottom:10px}
+  .q{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:12px}
+  .q p{font-size:14px;margin-bottom:10px}
+  .opt{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);
+    border-radius:6px;padding:10px 12px;margin-bottom:7px;font-size:13.5px;cursor:pointer;color:var(--ink)}
+  .opt:hover{border-color:var(--steel);background:var(--steel-soft)}
+  .opt.right{background:var(--ok-soft);border-color:var(--ok);color:#1c5637;font-weight:600}
+  .opt.wrong{background:var(--err-soft);border-color:var(--err);color:#7d2626}
+  .opt:disabled{cursor:default}
+  .explain{font-size:13px;color:var(--ink-soft);margin-top:8px;padding-left:4px;display:none}
+  .explain.show{display:block}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink-soft);margin-top:14px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:13px;height:13px;border-radius:3px;border:1px solid}
+  footer{margin-top:30px;text-align:center;font-size:12px;color:var(--ink-soft)}
+  .diagram{font-family:'DejaVu Sans Mono',monospace;font-size:12px;color:var(--ink-soft);
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;margin-top:14px;overflow-x:auto;white-space:pre;line-height:1.7}
+  @media(max-width:640px){h1{font-size:24px}.rail div{font-size:10.5px;padding:7px 3px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Diklat CPM · Latihan Mandiri</div>
+    <h1>Simulator Jalur Kritis: SUTT 150 kV</h1>
+    <p class="sub">Hitung sendiri jadwalnya. Isi tiap kolom, tekan periksa, dan alat ini akan memvalidasi angka Anda satu per satu. Jalur kritis muncul sendiri saat perhitungan Anda benar. Kerjakan kapan saja, sendiri.</p>
+  </header>
+
+  <div class="diagram">JARINGAN (angka dalam minggu)
+
+   ┌─B (16)────────────┐
+ A(4)─┬─C(12)─D(10)──┬─E(8)──┐
+   │        └─────────┘    G(6)─H(2)
+   └─F(14)──────────────────┘
+
+ A→B, A→C, A→F · C→D · B,D→E · E,F→G · G→H</div>
+
+  <div class="board">
+    <div class="rail" id="rail">
+      <div data-phase="0" class="active">1 · Forward Pass (ES / EF)</div>
+      <div data-phase="1">2 · Backward Pass (LS / LF)</div>
+      <div data-phase="2">3 · Total Float</div>
+      <div data-phase="3">Jalur Kritis</div>
+    </div>
+
+    <h2 id="phaseTitle">Tahap 1 — Forward Pass</h2>
+    <p class="hint" id="phaseHint">Mulai dari A, bergerak maju. ES = paling cepat aktivitas bisa mulai · EF = ES + durasi. Saat dua panah bertemu, ambil EF terbesar.</p>
+
+    <div class="scroll">
+    <table>
+      <colgroup>
+        <col><col><col>
+        <col class="es"><col class="ef">
+        <col class="ls dim"><col class="lf dim"><col class="tf dim">
+      </colgroup>
+      <thead>
+        <tr><th>Akt</th><th>Durasi</th><th>Predecessor</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>TF</th></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    </div>
+
+    <div class="legend">
+      <span><span class="sw" style="background:var(--steel-soft);border-color:var(--steel)"></span>terkunci (sudah benar/diberikan)</span>
+      <span><span class="sw" style="background:var(--ok-soft);border-color:var(--ok)"></span>benar</span>
+      <span><span class="sw" style="background:var(--err-soft);border-color:var(--err)"></span>periksa lagi</span>
+    </div>
+
+    <div class="feedback" id="feedback"></div>
+
+    <div class="controls">
+      <button id="checkBtn">Periksa tahap ini</button>
+      <button id="nextBtn" class="ghost" disabled>Lanjut →</button>
+      <button id="revealBtn" class="ghost">Saya menyerah — tampilkan jawaban</button>
+      <div class="score">Skor: <b id="scoreVal">0</b> / 100</div>
+    </div>
+  </div>
+
+  <div class="bonus" id="bonus">
+    <h3>Dua pertanyaan penentu — inti kenapa kita menghitung tadi</h3>
+    <div class="q" id="q1">
+      <p><b>Bonus 1.</b> Pembebasan ROW (aktivitas C) molor 4 minggu. Apa yang terjadi pada tanggal selesai proyek?</p>
+      <button class="opt" data-c="0">Tidak berubah — C punya cukup float</button>
+      <button class="opt" data-c="1">Mundur 4 minggu penuh — C ada di jalur kritis (TF 0)</button>
+      <button class="opt" data-c="2">Mundur 2 minggu — separuh diserap float</button>
+      <div class="explain" id="e1">C ber-TF nol, jadi setiap minggu keterlambatannya mengalir 1:1 ke COD. Proyek menjadi 46 minggu. Efek samping: TF fabrikasi tower (B) justru naik dari 6 menjadi 10 minggu — jalur kritis itu makhluk hidup, ia berpindah saat kenyataan berubah.</div>
+    </div>
+    <div class="q" id="q2">
+      <p><b>Bonus 2.</b> Proyek harus dipercepat. Manajer ingin menambah tim pada Pengadaan konduktor (F). Bijak atau sia-sia?</p>
+      <button class="opt" data-c="0">Bijak — F durasinya panjang (14 mgg)</button>
+      <button class="opt" data-c="1">Sia-sia — F ber-TF 16 mgg, di luar jalur kritis; nol hari terbeli</button>
+      <button class="opt" data-c="2">Bijak — mempercepat apa pun mempercepat proyek</button>
+      <div class="explain" id="e2">F punya Total Float 16 minggu — ia bukan penentu. Uang dan tenaga yang ditumpahkan ke F membeli nol hari pada tanggal selesai. Kompresi hanya bekerja di jalur kritis: A–C–D–E–G–H.</div>
+    </div>
+  </div>
+
+  <footer>Latihan mandiri diklat CPM · jaringan SUTT 150 kV · jalur kritis A–C–D–E–G–H = 42 minggu</footer>
+</div>
+
+<script>
+const ACT = [
+  {id:'A',desc:'Survey & soil investigation',dur:4,pred:'—',ES:0,EF:4,LS:0,LF:4,TF:0},
+  {id:'B',desc:'Pengadaan tower (fabrikasi)',dur:16,pred:'A',ES:4,EF:20,LS:10,LF:26,TF:6},
+  {id:'C',desc:'Pembebasan ROW & tapak tower',dur:12,pred:'A',ES:4,EF:16,LS:4,LF:16,TF:0},
+  {id:'D',desc:'Pondasi tower',dur:10,pred:'C',ES:16,EF:26,LS:16,LF:26,TF:0},
+  {id:'E',desc:'Erection tower',dur:8,pred:'B, D',ES:26,EF:34,LS:26,LF:34,TF:0},
+  {id:'F',desc:'Pengadaan konduktor & aksesori',dur:14,pred:'A',ES:4,EF:18,LS:20,LF:34,TF:16},
+  {id:'G',desc:'Penarikan konduktor (stringing)',dur:6,pred:'E, F',ES:34,EF:40,LS:34,LF:40,TF:0},
+  {id:'H',desc:'Testing & energization',dur:2,pred:'G',ES:40,EF:42,LS:40,LF:42,TF:0},
+];
+const COLS = {0:['ES','EF'],1:['LS','LF'],2:['TF']};
+const PHASE_TITLE = ['Tahap 1 — Forward Pass','Tahap 2 — Backward Pass','Tahap 3 — Total Float','Selesai'];
+const PHASE_HINT = [
+  'Mulai dari A, bergerak maju. ES = paling cepat bisa mulai · EF = ES + durasi. Saat dua panah bertemu di satu aktivitas, ambil EF terbesar.',
+  'Mulai dari H, bergerak mundur. LF = paling lambat boleh selesai · LS = LF − durasi. Saat mundur ke percabangan, ambil LS terkecil.',
+  'Total Float = LS − ES untuk setiap aktivitas. Aktivitas ber-TF nol tidak punya ruang bernapas.',
+  ''
+];
+let phase = 0, score = 0, revealed = false;
+const tbody = document.getElementById('tbody');
+const fb = document.getElementById('feedback');
+const scoreVal = document.getElementById('scoreVal');
+const checkBtn = document.getElementById('checkBtn');
+const nextBtn = document.getElementById('nextBtn');
+const revealBtn = document.getElementById('revealBtn');
+
+function buildRows(){
+  ACT.forEach(a=>{
+    const tr=document.createElement('tr'); tr.id='row-'+a.id;
+    tr.innerHTML=`<th>${a.id}<span class="desc">${a.desc}</span></th>
+      <td>${a.dur}</td><td class="pred">${a.pred}</td>
+      ${['ES','EF','LS','LF','TF'].map(k=>`<td><input data-act="${a.id}" data-k="${k}" inputmode="numeric" disabled></td>`).join('')}`;
+    tbody.appendChild(tr);
+  });
+  enablePhase();
+}
+function enablePhase(){
+  document.querySelectorAll('#rail div').forEach(d=>{
+    const p=+d.dataset.phase; d.classList.toggle('active',p===phase);
+    d.classList.toggle('done',p<phase);
+  });
+  document.getElementById('phaseTitle').textContent=PHASE_TITLE[phase];
+  document.getElementById('phaseHint').textContent=PHASE_HINT[phase];
+  const active=COLS[phase]||[];
+  document.querySelectorAll('input').forEach(inp=>{
+    const k=inp.dataset.k;
+    if(active.includes(k)){ inp.disabled=false; }
+    else if(!inp.classList.contains('locked')){ inp.disabled=true; }
+  });
+  const first=document.querySelector(`input[data-k="${active[0]}"]:not(.locked)`);
+  if(first) first.focus();
+}
+function check(){
+  const active=COLS[phase]; let wrong=[], filled=0, total=0;
+  ACT.forEach(a=>{
+    active.forEach(k=>{
+      const inp=document.querySelector(`input[data-act="${a.id}"][data-k="${k}"]`);
+      if(inp.classList.contains('locked')) return;
+      total++;
+      const v=inp.value.trim();
+      if(v==='') { return; }
+      filled++;
+      inp.classList.remove('right','wrong');
+      if(+v===a[k]){ inp.classList.add('right'); }
+      else { inp.classList.add('wrong'); wrong.push(a.id+'·'+k); }
+    });
+  });
+  if(filled<total){
+    showFB(false,'Masih ada kotak kosong pada tahap ini. Isi semua dulu, baru periksa.');
+    return;
+  }
+  if(wrong.length===0){
+    // lock this phase
+    active.forEach(k=>document.querySelectorAll(`input[data-k="${k}"]`).forEach(i=>{
+      i.classList.remove('right'); i.classList.add('locked'); i.disabled=true; i.readOnly=true;
+    }));
+    const gain = phase<2?30:40;
+    if(!revealed){ score=Math.min(100,score+gain); scoreVal.textContent=score; }
+    showFB(true, phase<2
+      ? 'Semua benar. Tahap ini terkunci — lanjut ke tahap berikutnya.'
+      : 'Total Float benar semua. Sekarang jalur kritis akan tersorot otomatis.');
+    checkBtn.disabled=true; nextBtn.disabled=false; nextBtn.focus();
+  } else {
+    showFB(false,`Ada ${wrong.length} angka yang belum tepat. Yang merah perlu diperiksa lagi. Petunjuk: `+hintFor(wrong[0]));
+  }
+}
+function hintFor(tag){
+  const [id,k]=tag.split('·');
+  if(k==='EF'||k==='ES'){
+    if(id==='E') return 'aktivitas E menunggu B dan D — ambil EF yang lebih besar di antara keduanya.';
+    if(id==='G') return 'aktivitas G menunggu E dan F — ambil EF yang lebih besar.';
+    return 'EF = ES + durasi; ES = EF terbesar dari semua predecessor.';
+  }
+  if(k==='LF'||k==='LS'){
+    if(id==='A') return 'A punya tiga successor (B, C, F) — LF-nya = LS terkecil di antara ketiganya.';
+    return 'LS = LF − durasi; LF = LS terkecil dari semua successor.';
+  }
+  return 'TF = LS − ES.';
+}
+function showFB(good,msg){
+  fb.className='feedback show '+(good?'good':'bad'); fb.innerHTML=msg;
+}
+function nextPhase(){
+  fb.className='feedback'; checkBtn.disabled=false; nextBtn.disabled=true;
+  phase++;
+  if(phase<3){ enablePhase(); }
+  else { finish(); }
+}
+function finish(){
+  document.querySelectorAll('#rail div').forEach(d=>{const p=+d.dataset.phase; d.classList.toggle('done',p<3); d.classList.toggle('active',p===3);});
+  document.getElementById('phaseTitle').textContent='Jalur kritis teridentifikasi';
+  document.getElementById('phaseHint').textContent='Baris bertanda merah adalah jalur kritis — rangkaian aktivitas ber-Total Float nol. Inilah 42 minggu yang menentukan tanggal selesai proyek.';
+  ACT.filter(a=>a.TF===0).forEach(a=>{
+    const row=document.getElementById('row-'+a.id); row.classList.add('crit');
+    row.querySelector('th').insertAdjacentHTML('beforeend',' <span class="badge-crit">KRITIS</span>');
+  });
+  checkBtn.style.display='none'; nextBtn.style.display='none';
+  showFB(true,`<b>Perhitungan lengkap.</b> Jalur kritis: A → C → D → E → G → H = 42 minggu. Skor Anda ${score}/100. Dua pertanyaan di bawah menguji apakah Anda paham <i>kenapa</i> ini penting — bukan sekadar bisa menghitungnya.`);
+  document.getElementById('bonus').classList.add('show');
+  document.getElementById('bonus').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function reveal(){
+  revealed=true;
+  ['ES','EF','LS','LF','TF'].forEach(k=>document.querySelectorAll(`input[data-k="${k}"]`).forEach(inp=>{
+    const a=ACT.find(x=>x.id===inp.dataset.act); inp.value=a[k];
+    inp.classList.remove('right','wrong'); inp.classList.add('locked'); inp.disabled=true; inp.readOnly=true;
+  }));
+  phase=3; finish();
+  showFB(true,'Jawaban ditampilkan. Skor beku di '+score+'/100 — tapi pahami tabelnya: setiap ES/EF lahir dari mengambil nilai terbesar saat maju, setiap LS/LF dari nilai terkecil saat mundur. Coba ulang dari network kosong kalau mau menantang diri.');
+}
+// bonus handlers
+document.querySelectorAll('#bonus .q').forEach((q,i)=>{
+  q.querySelectorAll('.opt').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      if(q.dataset.done) return; q.dataset.done=1;
+      const correct = i===0?1:1;
+      q.querySelectorAll('.opt').forEach((b,j)=>{ b.disabled=true; if(j===correct)b.classList.add('right'); });
+      if(+btn.dataset.c!==correct) btn.classList.add('wrong');
+      else if(!revealed){ score=Math.min(100,score); }
+      document.getElementById('e'+(i+1)).classList.add('show');
+    });
+  });
+});
+checkBtn.addEventListener('click',check);
+nextBtn.addEventListener('click',nextPhase);
+revealBtn.addEventListener('click',reveal);
+// Enter to check
+document.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!checkBtn.disabled){check();} });
+buildRows();
+</script>
+</body>
+</html>
